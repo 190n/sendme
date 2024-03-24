@@ -1,3 +1,5 @@
+mod args;
+
 use std::time::Instant;
 
 use askama::Template;
@@ -18,12 +20,16 @@ use tower_http::catch_panic::CatchPanicLayer;
 #[template(path = "index.html")]
 struct IndexTemplate;
 
-/// paths: slice of (filename, contents)
-fn add_static_files(mut app: Router, paths: &[(&'static str, &'static [u8])]) -> Router {
-	for &(path, data) in paths {
-		app = app.route(path, get(data));
+/// paths: slice of (filename, content-type, contents)
+fn add_static_files(
+	mut app: Router,
+	paths: &[(&'static str, &'static str, &'static [u8])],
+) -> Router {
+	for &(path, content_type, data) in paths {
+		let response = ([("content-type", content_type)], data);
+		app = app.route(path, get(response));
 	}
-	return app;
+	app
 }
 
 async fn upload(headers: HeaderMap, mut multipart: Multipart) -> response::Result<()> {
@@ -67,13 +73,29 @@ async fn upload(headers: HeaderMap, mut multipart: Multipart) -> response::Resul
 
 #[tokio::main]
 async fn main() {
+	let args = match args::parse() {
+		Ok(args) => args,
+		Err(e) => {
+			eprintln!("{e}");
+			std::process::exit(1);
+		},
+	};
+	println!("{args:?}");
+
 	let mut app = Router::new()
 		.route("/", get(|| async { IndexTemplate {} }))
 		.route("/upload", post(upload))
 		.layer(ServiceBuilder::new().layer(CatchPanicLayer::new()))
 		.layer(DefaultBodyLimit::max(50 * 1024 * 1024 * 1024));
 
-	app = add_static_files(app, &[("/main.css", include_bytes!("../static/main.css"))]);
+	app = add_static_files(
+		app,
+		&[(
+			"/main.css",
+			"text/css",
+			include_bytes!("../static/main.css"),
+		)],
+	);
 
 	let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
 	axum::serve(listener, app).await.unwrap();
