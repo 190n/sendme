@@ -1,6 +1,8 @@
 use std::{
 	fmt::{self, Display, Formatter},
 	io::IsTerminal,
+	num::ParseIntError,
+	str::FromStr,
 };
 
 #[derive(Debug)]
@@ -21,13 +23,14 @@ pub enum Mode {
 pub struct Args {
 	pub mode: Mode,
 	pub port: u16,
+	pub limit: usize,
 }
 
 pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 	write!(
 		f,
 		concat!(
-			"usage: {} [-s|-m|-t] [-O | -o <filename|dir>] [-p port] [-fh]\n",
+			"usage: {} [-s|-m|-t] [-O | -o <filename|dir>] [-p port] [-l limit] [-fh]\n",
 			"  -s: allow uploading single file (default)\n",
 			"  -m: allow uploading multiple files\n",
 			"  -t: accept text entry instead of file\n",
@@ -38,6 +41,10 @@ pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 			"               stdout for -t\n",
 			"  -p: specify port to listen on\n",
 			"      default: free port assigned by OS\n",
+			"  -l: specify file size limit, in bytes or with suffixes:\n",
+			"      k, M, G = powers of 1000\n",
+			"      Ki, Mi, Gi = powers of 1024\n",
+			"      default: 2Gi\n",
 			"  -f (with -s): allow writing files to stdout when stdout is a terminal\n",
 			"  -h: show help",
 		),
@@ -88,17 +95,44 @@ impl Display for Error {
 	}
 }
 
+#[derive(Debug)]
+pub struct Limit(pub usize);
+
+impl FromStr for Limit {
+	type Err = ParseIntError;
+	fn from_str(s: &str) -> Result<Self, Self::Err> {
+		const SUFFIXES: [(&'static str, usize); 6] = [
+			("k", 1000),
+			("M", 1_000_000),
+			("G", 1_000_000_000),
+			("Ki", 1024),
+			("Mi", 1024 * 1024),
+			("Gi", 1024 * 1024 * 1024),
+		];
+		for (suffix, multiplier) in SUFFIXES {
+			if let Some((numeric_part, "")) = s.split_once(suffix) {
+				return Ok(Limit(multiplier * numeric_part.parse::<usize>()?));
+			}
+		}
+		Ok(Limit(s.parse()?))
+	}
+}
+
 pub fn parse() -> Result<Args, Error> {
 	let mut pargs = pico_args::Arguments::from_env();
 	if pargs.contains(["-h", "--help"]) {
 		return Err(Error::HelpRequested);
 	}
 
-	let port = pargs.opt_value_from_str("-p")?.unwrap_or(0);
-	let out_name = pargs.opt_value_from_str("-o")?;
+	let port: u16 = pargs.opt_value_from_str("-p")?.unwrap_or(0);
+	let out_name: Option<String> = pargs.opt_value_from_str("-o")?;
+	let limit: Limit = pargs
+		.opt_value_from_str("-l")?
+		.unwrap_or(Limit(2 * 1024 * 1024 * 1024));
 
 	let args = Args {
 		port,
+		limit: limit.0,
 		mode: match (
 			pargs.contains("-s"),
 			pargs.contains("-m"),

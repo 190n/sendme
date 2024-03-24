@@ -3,10 +3,31 @@
 {% block content %}
 <h1>Sendme</h1>
 <form action="/upload" method="POST" enctype="multipart/form-data">
-	<label for="files">
-		Enter data:
-		<input type="file" id="files" name="files" multiple>
+	<label for="data">
+		<p>
+			{% match mode %}
+				{% when ModeTag::MultipleFiles %}
+				Select file(s) to upload:
+				{% when ModeTag::SingleFile %}
+				Select a file to upload:
+				{% when ModeTag::Text %}
+				Enter text:
+			{% endmatch %}
+		</p>
+		{% if mode == ModeTag::Text %}
+			<textarea id="data" name="data"></textarea>
+		{% else %}
+			<input type="file" id="data" name="data"{% if mode == ModeTag::MultipleFiles %} multiple{% endif %}>
+		{% endif %}
 	</label>
-	<button type="submit">Submit</button>
+	<p>
+		<button type="submit">
+			{% if mode == ModeTag::Text %}
+				Submit
+			{% else %}
+				Upload
+			{% endif %}
+		</button>
+	</p>
 </form>
 {% endblock %}

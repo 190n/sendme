@@ -1,8 +1,8 @@
 mod args;
+mod index;
 
-use std::time::Instant;
+use std::{net::Ipv4Addr, time::Instant};
 
-use askama::Template;
 use axum::{
 	extract::{DefaultBodyLimit, Multipart},
 	http::{
@@ -16,9 +16,7 @@ use axum::{
 use tower::ServiceBuilder;
 use tower_http::catch_panic::CatchPanicLayer;
 
-#[derive(Template)]
-#[template(path = "index.html")]
-struct IndexTemplate;
+use index::IndexTemplate;
 
 /// paths: slice of (filename, content-type, contents)
 fn add_static_files(
@@ -44,9 +42,10 @@ async fn upload(headers: HeaderMap, mut multipart: Multipart) -> response::Resul
 		.get("content-type")
 		.ok_or(StatusCode::BAD_REQUEST)?
 		.len();
-	let size_estimate = content_length - boundary_length - 128;
+	let size_estimate = (content_length - boundary_length).saturating_sub(128);
 
 	while let Some(mut field) = multipart.next_field().await? {
+		dbg!(&field);
 		println!(
 			"starting field {} / {}",
 			field.name().unwrap(),
@@ -72,7 +71,7 @@ async fn upload(headers: HeaderMap, mut multipart: Multipart) -> response::Resul
 }
 
 #[tokio::main]
-async fn main() {
+async fn main() -> std::io::Result<()> {
 	let args = match args::parse() {
 		Ok(args) => args,
 		Err(e) => {
@@ -82,11 +81,13 @@ async fn main() {
 	};
 	println!("{args:?}");
 
+	let index = IndexTemplate::new(&args.mode);
+
 	let mut app = Router::new()
-		.route("/", get(|| async { IndexTemplate {} }))
+		.route("/", get(move || async move { index }))
 		.route("/upload", post(upload))
 		.layer(ServiceBuilder::new().layer(CatchPanicLayer::new()))
-		.layer(DefaultBodyLimit::max(50 * 1024 * 1024 * 1024));
+		.layer(DefaultBodyLimit::max(args.limit));
 
 	app = add_static_files(
 		app,
@@ -97,6 +98,10 @@ async fn main() {
 		)],
 	);
 
-	let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
-	axum::serve(listener, app).await.unwrap();
+	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, args.port)).await?;
+	eprintln!(
+		"listening at http://localhost:{}",
+		listener.local_addr()?.port(),
+	);
+	axum::serve(listener, app).await
 }
