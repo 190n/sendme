@@ -1,5 +1,5 @@
 use axum::{
-	extract::Multipart,
+	extract::{multipart::Field, Multipart},
 	http::{
 		header::{HeaderMap, CONTENT_LENGTH},
 		StatusCode,
@@ -30,6 +30,40 @@ impl FileOrStdout {
 			FileOrStdout::Stdout(s) => s.flush(),
 			_ => Ok(()),
 		}
+	}
+
+	pub fn from_mode(mode: &Mode, field: &Field<'_>) -> response::Result<Self> {
+		Ok(match mode {
+			Mode::Text { out_filename: None }
+			| Mode::SingleFile {
+				out: Output::Stdout,
+			} => std::io::stdout().into(),
+
+			Mode::Text {
+				out_filename: Some(ref name),
+			}
+			| Mode::SingleFile {
+				out: Output::Filename(ref name),
+			} => File::create(name).map_err(as_internal_error)?.into(),
+
+			Mode::MultipleFiles { out_dir } => {
+				let base_dir = Path::new(out_dir.as_deref().unwrap_or("."));
+				let file_name = base_dir.join(
+					safe_path(field.file_name().ok_or(StatusCode::BAD_REQUEST)?)
+						.ok_or(StatusCode::BAD_REQUEST)?,
+				);
+				File::create(file_name).map_err(as_internal_error)?.into()
+			},
+
+			Mode::SingleFile {
+				out: Output::ClientFilename,
+			} => File::create(
+				safe_path(field.file_name().ok_or(StatusCode::BAD_REQUEST)?)
+					.ok_or(StatusCode::BAD_REQUEST)?,
+			)
+			.map_err(as_internal_error)?
+			.into(),
+		})
 	}
 }
 
@@ -96,37 +130,7 @@ pub async fn upload(
 			continue;
 		}
 
-		let mut out: FileOrStdout = match &state.args.mode {
-			Mode::Text { out_filename: None }
-			| Mode::SingleFile {
-				out: Output::Stdout,
-			} => std::io::stdout().into(),
-
-			Mode::Text {
-				out_filename: Some(ref name),
-			}
-			| Mode::SingleFile {
-				out: Output::Filename(ref name),
-			} => File::create(name).map_err(as_internal_error)?.into(),
-
-			Mode::MultipleFiles { out_dir } => {
-				let base_dir = Path::new(out_dir.as_deref().unwrap_or("."));
-				let file_name = base_dir.join(
-					safe_path(field.file_name().ok_or(StatusCode::BAD_REQUEST)?)
-						.ok_or(StatusCode::BAD_REQUEST)?,
-				);
-				File::create(file_name).map_err(as_internal_error)?.into()
-			},
-
-			Mode::SingleFile {
-				out: Output::ClientFilename,
-			} => File::create(
-				safe_path(field.file_name().ok_or(StatusCode::BAD_REQUEST)?)
-					.ok_or(StatusCode::BAD_REQUEST)?,
-			)
-			.map_err(as_internal_error)?
-			.into(),
-		};
+		let mut out = FileOrStdout::from_mode(&state.args.mode, &field)?;
 
 		let mut total: usize = 0;
 		let start = Instant::now();
