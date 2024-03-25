@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Success</h1>
+<p>
+	{{ message }}
+</p>
+{% if keep_running %}
+<p>
+	<a href="/">Send more</a>
+</p>
+{% endif %}
+{% endblock %}

@@ -105,7 +105,7 @@ pub struct Limit(pub usize);
 impl FromStr for Limit {
 	type Err = ParseIntError;
 	fn from_str(s: &str) -> Result<Self, Self::Err> {
-		const SUFFIXES: [(&'static str, usize); 6] = [
+		const SUFFIXES: [(&str, usize); 6] = [
 			("k", 1000),
 			("M", 1_000_000),
 			("G", 1_000_000_000),

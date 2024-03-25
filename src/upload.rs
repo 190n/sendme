@@ -1,3 +1,4 @@
+use askama::Template;
 use axum::{
 	extract::{multipart::Field, Multipart},
 	http::{
@@ -18,6 +19,13 @@ use crate::{
 	args::{Mode, Output},
 	State,
 };
+
+#[derive(Clone, Copy)]
+#[template(path = "upload-success.html")]
+pub struct UploadSuccessTemplate {
+	message: &'static str,
+	keep_running: bool,
+}
 
 enum FileOrStdout {
 	File(File),
@@ -69,9 +77,9 @@ impl FileOrStdout {
 
 impl AsMut<dyn Write + Send> for FileOrStdout {
 	fn as_mut(&mut self) -> &mut (dyn Write + Send + 'static) {
-		match self {
-			&mut FileOrStdout::File(ref mut f) => f,
-			&mut FileOrStdout::Stdout(ref mut s) => s,
+		match *self {
+			FileOrStdout::File(ref mut f) => f,
+			FileOrStdout::Stdout(ref mut s) => s,
 		}
 	}
 }
@@ -101,7 +109,7 @@ pub async fn upload(
 	headers: HeaderMap,
 	Extension(state): Extension<&'static State>,
 	mut multipart: Multipart,
-) -> response::Result<&'static str> {
+) -> response::Result<UploadSuccessTemplate> {
 	let content_length: usize = headers
 		.get(CONTENT_LENGTH)
 		.ok_or(StatusCode::BAD_REQUEST)?
@@ -141,15 +149,15 @@ pub async fn upload(
 		}
 		out.flush().map_err(as_internal_error)?;
 
-		eprintln!("total = {total}");
+		// eprintln!("total = {total}");
 		let ms = start.elapsed().as_millis();
 		let rate = if ms == 0 {
 			99999
 		} else {
 			(total as u128) / ms / 1000
 		};
-		eprintln!("{rate} MB/s");
-		eprintln!("error = {}", (size_estimate as isize) - (total as isize));
+		// eprintln!("{rate} MB/s");
+		// eprintln!("error = {}", (size_estimate as isize) - (total as isize));
 
 		if !matches!(state.args.mode, Mode::MultipleFiles { out_dir: _ }) {
 			break;
@@ -160,5 +168,12 @@ pub async fn upload(
 		tx.send(()).unwrap();
 	}
 
-	Ok("uploaded!")
+	Ok(UploadSuccessTemplate {
+		message: match state.args.mode {
+			Mode::MultipleFiles { out_dir: _ } => "Your files have been uploaded.",
+			Mode::SingleFile { out: _ } => "Your file has been uploaded.",
+			Mode::Text { out_filename: _ } => "Your text has been sent.",
+		},
+		keep_running: state.args.keep_running,
+	})
 }

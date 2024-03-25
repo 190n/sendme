@@ -45,7 +45,6 @@ async fn main() -> std::io::Result<()> {
 	};
 
 	let (tx, rx) = oneshot::channel::<()>();
-	println!("{args:?}");
 
 	let state: &'static State = Box::leak(Box::new(State {
 		close_sender: Mutex::new(if args.keep_running { None } else { Some(tx) }),
