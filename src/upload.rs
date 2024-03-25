@@ -11,11 +11,13 @@ use std::{
 	fs::{DirBuilder, File},
 	io::{self, Stdout, Write},
 	path::Path,
-	sync::Arc,
 	time::Instant,
 };
 
-use crate::args::{Args, Mode, Output};
+use crate::{
+	args::{Mode, Output},
+	State,
+};
 
 enum FileOrStdout {
 	File(File),
@@ -63,9 +65,9 @@ fn as_internal_error(e: impl std::fmt::Debug) -> StatusCode {
 
 pub async fn upload(
 	headers: HeaderMap,
-	Extension(args): Extension<Arc<Args>>,
+	Extension(state): Extension<&'static State>,
 	mut multipart: Multipart,
-) -> response::Result<()> {
+) -> response::Result<&'static str> {
 	let content_length: usize = headers
 		.get(CONTENT_LENGTH)
 		.ok_or(StatusCode::BAD_REQUEST)?
@@ -81,7 +83,7 @@ pub async fn upload(
 
 	if let Mode::MultipleFiles {
 		out_dir: Some(ref dir_name),
-	} = args.mode
+	} = state.args.mode
 	{
 		DirBuilder::new()
 			.recursive(true)
@@ -94,7 +96,7 @@ pub async fn upload(
 			continue;
 		}
 
-		let mut out: FileOrStdout = match &args.mode {
+		let mut out: FileOrStdout = match &state.args.mode {
 			Mode::Text { out_filename: None }
 			| Mode::SingleFile {
 				out: Output::Stdout,
@@ -145,9 +147,14 @@ pub async fn upload(
 		eprintln!("{rate} MB/s");
 		eprintln!("error = {}", (size_estimate as isize) - (total as isize));
 
-		if !matches!(args.mode, Mode::MultipleFiles { out_dir: _ }) {
-			return Ok(());
+		if !matches!(state.args.mode, Mode::MultipleFiles { out_dir: _ }) {
+			break;
 		}
 	}
-	Ok(())
+
+	if let Some(tx) = state.close_sender.lock().unwrap().take() {
+		tx.send(()).unwrap();
+	}
+
+	Ok("uploaded!")
 }

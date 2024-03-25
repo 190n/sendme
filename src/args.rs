@@ -24,15 +24,17 @@ pub struct Args {
 	pub mode: Mode,
 	pub port: u16,
 	pub limit: usize,
+	pub keep_running: bool,
+	pub quiet: bool,
 }
 
 pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 	write!(
 		f,
 		concat!(
-			"usage: {} [-s|-m|-t] [-O | -o <filename|dir>] [-p port] [-l limit] [-fh]\n",
+			"usage: {} [-s|-m|-t] [-O | -o <filename|dir>] [-p port] [-l limit] [-fkqh]\n",
 			"  -s: allow uploading single file (default)\n",
-			"  -m: allow uploading multiple files\n",
+			"  -m: allow uploading multiple files at once\n",
 			"  -t: accept text entry instead of file\n",
 			"  -O (without -m/-t/-o): use name of the file the user uploaded\n",
 			"  -o: specify output filename, or directory with -m\n",
@@ -46,6 +48,8 @@ pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 			"      Ki, Mi, Gi = powers of 1024\n",
 			"      default: 2Gi\n",
 			"  -f (with -s): allow writing files to stdout when stdout is a terminal\n",
+			"  -k: keep the server running after the first upload\n",
+			"  -q: suppress progress bars\n",
 			"  -h: show help",
 		),
 		std::env::args_os()
@@ -133,6 +137,8 @@ pub fn parse() -> Result<Args, Error> {
 	let args = Args {
 		port,
 		limit: limit.0,
+		keep_running: pargs.contains("-k"),
+		quiet: pargs.contains("-q"),
 		mode: match (
 			pargs.contains("-s"),
 			pargs.contains("-m"),
