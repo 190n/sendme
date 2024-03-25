@@ -1,22 +1,19 @@
 mod args;
 mod index;
+mod upload;
 
-use std::{net::Ipv4Addr, time::Instant};
+use std::{net::Ipv4Addr, sync::Arc};
 
 use axum::{
-	extract::{DefaultBodyLimit, Multipart},
-	http::{
-		header::{HeaderMap, CONTENT_LENGTH},
-		StatusCode,
-	},
-	response,
+	extract::DefaultBodyLimit,
 	routing::{get, post},
-	Router,
+	Extension, Router,
 };
 use tower::ServiceBuilder;
 use tower_http::catch_panic::CatchPanicLayer;
 
 use index::IndexTemplate;
+use upload::upload;
 
 /// paths: slice of (filename, content-type, contents)
 fn add_static_files(
@@ -30,46 +27,6 @@ fn add_static_files(
 	app
 }
 
-async fn upload(headers: HeaderMap, mut multipart: Multipart) -> response::Result<()> {
-	let content_length: usize = headers
-		.get(CONTENT_LENGTH)
-		.ok_or(StatusCode::BAD_REQUEST)?
-		.to_str()
-		.map_err(|_| StatusCode::BAD_REQUEST)?
-		.parse()
-		.map_err(|_| StatusCode::BAD_REQUEST)?;
-	let boundary_length = headers
-		.get("content-type")
-		.ok_or(StatusCode::BAD_REQUEST)?
-		.len();
-	let size_estimate = (content_length - boundary_length).saturating_sub(128);
-
-	while let Some(mut field) = multipart.next_field().await? {
-		dbg!(&field);
-		println!(
-			"starting field {} / {}",
-			field.name().unwrap(),
-			field.file_name().unwrap()
-		);
-		let mut total: usize = 0;
-		let start = Instant::now();
-		while let Some(chunk) = field.chunk().await? {
-			// println!("got {} bytes", chunk.len());
-			total += chunk.len();
-		}
-		println!("total = {total}");
-		let ms = start.elapsed().as_millis();
-		let rate = if ms == 0 {
-			99999
-		} else {
-			(total as u128) / ms / 1000
-		};
-		println!("{rate} MB/s");
-		println!("error = {}", (size_estimate as isize) - (total as isize));
-	}
-	Ok(())
-}
-
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
 	let args = match args::parse() {
@@ -79,7 +36,7 @@ async fn main() -> std::io::Result<()> {
 			std::process::exit(1);
 		},
 	};
-	println!("{args:?}");
+	let port = args.port;
 
 	let index = IndexTemplate::new(&args.mode);
 
@@ -87,7 +44,8 @@ async fn main() -> std::io::Result<()> {
 		.route("/", get(move || async move { index }))
 		.route("/upload", post(upload))
 		.layer(ServiceBuilder::new().layer(CatchPanicLayer::new()))
-		.layer(DefaultBodyLimit::max(args.limit));
+		.layer(DefaultBodyLimit::max(args.limit))
+		.layer(Extension(Arc::new(args)));
 
 	app = add_static_files(
 		app,
@@ -98,7 +56,7 @@ async fn main() -> std::io::Result<()> {
 		)],
 	);
 
-	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, args.port)).await?;
+	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).await?;
 	eprintln!(
 		"listening at http://localhost:{}",
 		listener.local_addr()?.port(),
