@@ -142,7 +142,9 @@ pub async fn upload(
 
 		let mut out = FileOrStdout::from_mode(&state.args.mode, &field)?;
 		if !state.args.quiet {
-			let _ = progress.new_file(field.file_name().unwrap());
+			if let Some(name) = field.file_name() {
+				let _ = progress.new_file(name);
+			}
 		}
 
 		while let Some(chunk) = field.chunk().await? {
