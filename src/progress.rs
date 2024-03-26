@@ -4,6 +4,10 @@ use std::{
 };
 
 const SMOOTHING: f64 = 0.3;
+const BLOCKS: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
+const PRE_BAR: [u8; 4] = *b"\x1b[K[";
+const POST_BAR: [u8; 1] = *b"]";
+const BAR_WIDTH: usize = 24;
 
 pub struct Progress {
 	so_far: usize,
@@ -26,15 +30,35 @@ impl Progress {
 
 	fn draw(&self) -> io::Result<()> {
 		let mut stderr = io::stderr();
-		let mut buf = *b"\x1b[K[                ]";
-		let num_to_fill = if self.total == 0 || self.so_far >= self.total {
-			buf.len() - 5
+		let mut buf = [0u8; PRE_BAR.len() + BAR_WIDTH * 4 + POST_BAR.len()];
+		buf[0..PRE_BAR.len()].copy_from_slice(&PRE_BAR);
+		let sub_blocks = if self.total == 0 || self.so_far >= self.total {
+			8 * BAR_WIDTH
 		} else {
-			((self.so_far as f64 / self.total as f64).min(1.0) * (buf.len() - 5) as f64) as usize
+			(((self.so_far as f64 / self.total as f64).min(1.0) * BAR_WIDTH as f64) * 8.0) as usize
 		};
-		for b in &mut buf[4..][..num_to_fill] {
-			*b = b'=';
+
+		let mut byte_index: usize = PRE_BAR.len();
+		let mut num_chars: usize = 0;
+		for _ in 0..sub_blocks / 8 {
+			byte_index += BLOCKS[BLOCKS.len() - 1]
+				.encode_utf8(&mut buf[byte_index..])
+				.len();
+			num_chars += 1;
 		}
+		if sub_blocks % 8 > 0 {
+			byte_index += BLOCKS[sub_blocks % 8]
+				.encode_utf8(&mut buf[byte_index..])
+				.len();
+			num_chars += 1;
+		}
+		for _ in num_chars..BAR_WIDTH {
+			buf[byte_index] = b' ';
+			byte_index += 1;
+			num_chars += 1;
+		}
+		buf[byte_index..][..POST_BAR.len()].copy_from_slice(&POST_BAR);
+
 		stderr.write_all(&buf)?;
 		write!(
 			stderr,
