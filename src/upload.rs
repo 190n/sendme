@@ -12,15 +12,15 @@ use std::{
 	fs::{DirBuilder, File},
 	io::{self, Stdout, Write},
 	path::Path,
-	time::Instant,
 };
 
 use crate::{
 	args::{Mode, Output},
+	progress::Progress,
 	State,
 };
 
-#[derive(Clone, Copy)]
+#[derive(Template, Clone, Copy)]
 #[template(path = "upload-success.html")]
 pub struct UploadSuccessTemplate {
 	message: &'static str,
@@ -133,31 +133,25 @@ pub async fn upload(
 			.map_err(as_internal_error)?
 	}
 
+	let mut progress = Progress::new(size_estimate);
+
 	while let Some(mut field) = multipart.next_field().await? {
 		if field.name() != Some("data") {
 			continue;
 		}
 
 		let mut out = FileOrStdout::from_mode(&state.args.mode, &field)?;
-
-		let mut total: usize = 0;
-		let start = Instant::now();
+		if !state.args.quiet {
+			let _ = progress.new_file(field.file_name().unwrap());
+		}
 
 		while let Some(chunk) = field.chunk().await? {
 			out.as_mut().write_all(&chunk).map_err(as_internal_error)?;
-			total += chunk.len();
+			if !state.args.quiet {
+				let _ = progress.update(chunk.len());
+			}
 		}
 		out.flush().map_err(as_internal_error)?;
-
-		// eprintln!("total = {total}");
-		let ms = start.elapsed().as_millis();
-		let rate = if ms == 0 {
-			99999
-		} else {
-			(total as u128) / ms / 1000
-		};
-		// eprintln!("{rate} MB/s");
-		// eprintln!("error = {}", (size_estimate as isize) - (total as isize));
 
 		if !matches!(state.args.mode, Mode::MultipleFiles { out_dir: _ }) {
 			break;

@@ -1,5 +1,6 @@
 mod args;
 mod index;
+mod progress;
 mod upload;
 
 use std::{net::Ipv4Addr, sync::Mutex};
