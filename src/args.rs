@@ -1,4 +1,5 @@
 use std::{
+	ffi::OsStr,
 	fmt::{self, Display, Formatter},
 	io::IsTerminal,
 	num::ParseIntError,
@@ -32,6 +33,8 @@ pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 	write!(
 		f,
 		concat!(
+			"sendme: accept file uploads via an ephemeral HTML form\n",
+			"\n",
 			"usage: {} [-s|-m|-t] [-O | -o <filename|dir>] [-p port] [-l limit] [-fkqh]\n",
 			"  -s: allow uploading single file (default)\n",
 			"  -m: allow uploading multiple files at once\n",
@@ -54,10 +57,10 @@ pub fn show_help(f: &mut Formatter<'_>) -> fmt::Result {
 		),
 		std::env::args_os()
 			.next()
-			.unwrap_or("sendme".into())
-			.as_os_str()
+			.as_deref()
+			.unwrap_or(OsStr::new("sendme"))
 			.to_str()
-			.unwrap_or("sendme")
+			.unwrap_or("sendme"),
 	)
 }
 
