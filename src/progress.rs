@@ -52,7 +52,8 @@ impl Progress {
 				.len();
 			num_chars += 1;
 		}
-		for _ in num_chars..BAR_WIDTH {
+		let fixed_num_chars = num_chars;
+		for _ in fixed_num_chars..BAR_WIDTH {
 			buf[byte_index] = b' ';
 			byte_index += 1;
 			num_chars += 1;
