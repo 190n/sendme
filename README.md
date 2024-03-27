@@ -5,7 +5,10 @@ This is a command-line app intended to host a temporary web server to let someon
 Desired feature list:
 
 - [x] text sharing
-- [ ] room code/password or something
 - [x] file sharing
-- [ ] tailscale
 - [x] progress bar
+- [ ] room code/password or something
+- [ ] tailscale
+- [ ] progress bar and size checking for client
+- [ ] upload directory
+- [ ] pretty
