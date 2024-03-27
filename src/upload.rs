@@ -9,6 +9,7 @@ use axum::{
 };
 use std::{
 	ffi::OsStr,
+	fmt::Debug,
 	fs::{DirBuilder, File},
 	io::{self, Stdout, Write},
 	path::Path,
@@ -45,7 +46,7 @@ impl FileOrStdout {
 			Mode::Text { out_filename: None }
 			| Mode::SingleFile {
 				out: Output::Stdout,
-			} => std::io::stdout().into(),
+			} => io::stdout().into(),
 
 			Mode::Text {
 				out_filename: Some(ref name),
@@ -100,7 +101,7 @@ fn safe_path(path: &str) -> Option<&OsStr> {
 	Path::new(path).file_name()
 }
 
-fn as_internal_error(e: impl std::fmt::Debug) -> StatusCode {
+fn as_internal_error(e: impl Debug) -> StatusCode {
 	eprintln!("internal error: {e:?}");
 	StatusCode::INTERNAL_SERVER_ERROR
 }
@@ -117,6 +118,15 @@ pub async fn upload(
 		.map_err(|_| StatusCode::BAD_REQUEST)?
 		.parse()
 		.map_err(|_| StatusCode::BAD_REQUEST)?;
+
+	if content_length > state.args.limit {
+		// consume rest of request so we don't reset the connection
+		while let Some(mut field) = multipart.next_field().await? {
+			while field.chunk().await?.is_some() {}
+		}
+		return Err(StatusCode::PAYLOAD_TOO_LARGE.into());
+	}
+
 	let boundary_length = headers
 		.get("content-type")
 		.ok_or(StatusCode::BAD_REQUEST)?
