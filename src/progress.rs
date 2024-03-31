@@ -107,3 +107,9 @@ impl Progress {
 		Ok(())
 	}
 }
+
+impl Drop for Progress {
+	fn drop(&mut self) {
+		let _ = std::io::stderr().write_all(&RESET);
+	}
+}

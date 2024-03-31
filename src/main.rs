@@ -66,6 +66,18 @@ async fn better_errors(
 	response
 }
 
+/// paths: slice of (filename, content-type, contents)
+fn add_static_files(
+	mut app: Router,
+	paths: &[(&'static str, &'static str, &'static [u8])],
+) -> Router {
+	for &(path, content_type, data) in paths {
+		let response = ([("content-type", content_type)], data);
+		app = app.route(path, get(response));
+	}
+	app
+}
+
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
 	let args = match args::parse() {
@@ -83,9 +95,9 @@ async fn main() -> std::io::Result<()> {
 		args,
 	}));
 
-	let index = IndexTemplate::new(&state.args.mode);
+	let index = IndexTemplate::new(&state.args.mode, state.args.limit);
 
-	let app = Router::new()
+	let mut app = Router::new()
 		.route("/", get(move || async move { index }))
 		.route("/upload", post(upload))
 		// allow leeway here so that overflows are precisely caught by Content-Length check
@@ -93,6 +105,15 @@ async fn main() -> std::io::Result<()> {
 		.layer(middleware::from_fn(better_errors))
 		.layer(Extension(state))
 		.layer(CatchPanicLayer::new());
+
+	app = add_static_files(
+		app,
+		&[(
+			"/upload.js",
+			"application/javascript",
+			include_bytes!("../static/upload.js"),
+		)],
+	);
 
 	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, state.args.port)).await?;
 	eprintln!(

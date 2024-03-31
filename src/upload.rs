@@ -131,7 +131,9 @@ pub async fn upload(
 		.get("content-type")
 		.ok_or(StatusCode::BAD_REQUEST)?
 		.len();
-	let size_estimate = (content_length - boundary_length).saturating_sub(128);
+	let size_estimate = content_length
+		.saturating_sub(boundary_length)
+		.saturating_sub(128);
 
 	if let Mode::MultipleFiles {
 		out_dir: Some(ref dir_name),

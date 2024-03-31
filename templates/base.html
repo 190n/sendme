@@ -25,6 +25,28 @@
 				border: thin solid gray;
 				border-radius: 4px;
 			}
+
+			progress {
+				width: 100%;
+			}
+
+			#stats {
+				display: flex;
+			}
+
+			#stats > :first-child {
+				flex-grow: 1;
+				text-align: left;
+			}
+
+			#stats > :last-child {
+				flex-grow: 1;
+				text-align: right;
+			}
+
+			#progress-container {
+				display: none;
+			}
 		</style>
 	</head>
 	<body>

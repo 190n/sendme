@@ -2,7 +2,10 @@
 
 {% block content %}
 <h1>Sendme</h1>
-<form action="/upload" method="POST" enctype="multipart/form-data">
+<noscript>
+	JavaScript is disabled. There will be no indication of upload progress.
+</noscript>
+<form action="/upload" method="POST" enctype="multipart/form-data" id="form">
 	<label for="data">
 		<p>
 			{% match mode %}
@@ -30,4 +33,26 @@
 		</button>
 	</p>
 </form>
+<p id="error"></p>
+<section id="progress-container">
+	<p>
+		<progress id="progress" max="1">Uploading...</progress>
+	</p>
+	<p id="stats">
+		<code>
+			<span id="current">0 B</span>/<span id="max">0 B</span>
+		</code>
+		<code>
+			<span id="rate">0 B</span>/s
+			eta
+			<span id="eta">0:00</span>
+		</code>
+	</p>
+</section>
+{% if mode != ModeTag::Text %}
+	<script>
+		const uploadLimit = {{ limit }};
+	</script>
+	<script src="/upload.js"></script>
+{% endif %}
 {% endblock %}
