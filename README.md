@@ -7,8 +7,8 @@ Desired feature list:
 - [x] text sharing
 - [x] file sharing
 - [x] progress bar
-- [ ] room code/password or something
 - [x] progress bar and size checking for client
-- [ ] tailscale
+- [x] tailscale
+- [ ] room code/password or something
 - [ ] upload directory
 - [ ] pretty

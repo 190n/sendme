@@ -4,7 +4,7 @@ mod index;
 mod progress;
 mod upload;
 
-use std::{net::Ipv4Addr, sync::Mutex};
+use std::{net::Ipv4Addr, process::Stdio, sync::Mutex};
 
 use askama::Template;
 use askama_axum::IntoResponse;
@@ -16,7 +16,11 @@ use axum::{
 	Extension, Router,
 };
 use axum_core::response::Response;
-use tokio::sync::oneshot;
+use tokio::{
+	io::{AsyncBufReadExt, BufReader},
+	process::Command,
+	sync::oneshot,
+};
 use tower_http::catch_panic::CatchPanicLayer;
 
 use args::Args;
@@ -27,6 +31,7 @@ use upload::upload;
 pub struct State {
 	pub args: Args,
 	pub close_sender: Mutex<Option<oneshot::Sender<()>>>,
+	pub exit_code: Mutex<i32>,
 }
 
 #[derive(Template)]
@@ -93,6 +98,7 @@ async fn main() -> std::io::Result<()> {
 	let state: &'static State = Box::leak(Box::new(State {
 		close_sender: Mutex::new(if args.keep_running { None } else { Some(tx) }),
 		args,
+		exit_code: Mutex::new(0),
 	}));
 
 	let index = IndexTemplate::new(&state.args.mode, state.args.limit);
@@ -116,17 +122,56 @@ async fn main() -> std::io::Result<()> {
 	);
 
 	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, state.args.port)).await?;
-	eprintln!(
-		"listening at http://localhost:{}",
-		listener.local_addr()?.port(),
-	);
+	let port = listener.local_addr()?.port();
+	eprintln!("listening at http://localhost:{port}",);
+
+	if state.args.use_tailscale_funnel {
+		tokio::spawn(async move {
+			let shutdown = move || {
+				*state.exit_code.lock().unwrap() = 1;
+				let sender = state.close_sender.lock().unwrap().take().unwrap();
+				sender.send(()).unwrap();
+			};
+
+			let mut cmd = match Command::new("tailscale")
+				.args(["funnel", &port.to_string()])
+				.stdout(Stdio::piped())
+				.stderr(Stdio::inherit())
+				.spawn()
+			{
+				Ok(cmd) => cmd,
+				Err(e) => {
+					eprintln!("failed to start tailscale: {e}");
+					return shutdown();
+				},
+			};
+			let mut lines = BufReader::new(cmd.stdout.take().unwrap()).lines();
+
+			let (Ok(Some(line1)), Ok(Some(line2)), Ok(Some(line3))) = (
+				lines.next_line().await,
+				lines.next_line().await,
+				lines.next_line().await,
+			) else {
+				eprintln!("unexpected output from tailscale binary");
+				return shutdown();
+			};
+
+			if line1 != "Available on the internet:" || !line2.is_empty() {
+				eprint!("unexpected output from tailscale binary:\n> {line1}\n> {line2}\n");
+				return shutdown();
+			}
+			eprintln!("funnelled at {line3}");
+		});
+	}
 
 	let serve = axum::serve(listener, app);
 	if state.args.keep_running {
-		serve.await
+		serve.await?;
 	} else {
 		serve
 			.with_graceful_shutdown(async move { rx.await.unwrap() })
-			.await
+			.await?;
 	}
+
+	std::process::exit(*state.exit_code.lock().unwrap());
 }
