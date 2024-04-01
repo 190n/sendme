@@ -172,8 +172,9 @@ pub async fn upload(
 		}
 	}
 
-	if let Some(tx) = state.close_sender.lock().unwrap().take() {
-		tx.send(()).unwrap();
+	if !state.args.keep_running {
+		let sender = state.close_sender.lock().unwrap().take().unwrap();
+		sender.send(()).unwrap();
 	}
 
 	Ok(UploadSuccessTemplate {
