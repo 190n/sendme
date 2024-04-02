@@ -165,13 +165,9 @@ async fn main() -> std::io::Result<()> {
 	}
 
 	let serve = axum::serve(listener, app);
-	if state.args.keep_running {
-		serve.await?;
-	} else {
-		serve
-			.with_graceful_shutdown(async move { rx.await.unwrap() })
-			.await?;
-	}
+	serve
+		.with_graceful_shutdown(async move { rx.await.unwrap() })
+		.await?;
 
 	std::process::exit(*state.exit_code.lock().unwrap());
 }
