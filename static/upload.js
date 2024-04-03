@@ -1,5 +1,5 @@
 const UPDATE_INTERVAL_MS = 100;
-const SMOOTHING = 0.3;
+const VOLATILITY = 0.05;
 
 const form = document.getElementById('form');
 const input = document.getElementById('data');
@@ -71,7 +71,7 @@ async function upload() {
 					if (bytesPerS < 0) {
 						bytesPerS = newRateEstimate;
 					} else {
-						bytesPerS = SMOOTHING * newRateEstimate + (1 - SMOOTHING) * bytesPerS;
+						bytesPerS = VOLATILITY * newRateEstimate + (1 - VOLATILITY) * bytesPerS;
 					}
 
 					currentElem.textContent = formatBytes(e.loaded);

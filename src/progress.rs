@@ -5,7 +5,8 @@ use std::{
 
 use crate::fmt::{Bytes, Duration};
 
-const SMOOTHING: f64 = 0.3;
+const UPDATE_INTERVAL_MS: u128 = 100;
+const VOLATILITY: f64 = 0.05;
 const BLOCKS: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];
 const RESET: [u8; 3] = *b"\x1b[K";
 const POST_BAR: [u8; 1] = *b"]";
@@ -82,7 +83,7 @@ impl Progress {
 	pub fn update(&mut self, chunk: usize) -> io::Result<()> {
 		self.so_far += chunk;
 		let elapsed = self.last_update.elapsed();
-		if elapsed.as_millis() >= 100 {
+		if elapsed.as_millis() >= UPDATE_INTERVAL_MS {
 			let bytes_since_update = self.so_far - self.last_update_bytes;
 			self.last_update_bytes = self.so_far;
 			let new_rate_estimate = (bytes_since_update as f64) / elapsed.as_secs_f64();
@@ -90,7 +91,7 @@ impl Progress {
 				self.bytes_per_s = new_rate_estimate;
 			} else {
 				self.bytes_per_s =
-					SMOOTHING * new_rate_estimate + (1.0 - SMOOTHING) * self.bytes_per_s;
+					VOLATILITY * new_rate_estimate + (1.0 - VOLATILITY) * self.bytes_per_s;
 			}
 			self.last_update = Instant::now();
 			self.draw()?;
