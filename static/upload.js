@@ -53,6 +53,29 @@ async function upload() {
 	if (sum > uploadLimit) {
 		throw new Error(`Exceeded upload limit: ${formatBytes(sum)} > ${formatBytes(uploadLimit)}`);
 	}
+
+	const {instance: {exports}} = await WebAssembly.instantiateStreaming(await fetch('/xxhash.wasm'));
+	exports.init(BigInt(69420));
+	console.log(exports.buffer);
+	const memAsBytes = new Uint8Array(exports.memory.buffer);
+	const reader = input.files[0].stream().getReader();
+	const start = Date.now();
+	while (true) {
+		const {value: chunk, done} = await reader.read();
+		if (done) break;
+
+		let offset = 0;
+		while (offset < chunk.length) {
+			const toCopy = Math.min(65536, chunk.length - offset);
+			memAsBytes.set(new Uint8Array(chunk.buffer, offset, toCopy), exports.buffer.value);
+			exports.update(exports.buffer.value, toCopy);
+			offset += toCopy;
+		}
+	}
+	console.log(BigInt.asUintN(64, exports.digest()).toString(16).padStart(16, '0'));
+	const speed = 1000 * input.files[0].size / (Date.now() - start) / 1e6;
+	console.log(speed);
+
 	maxElem.textContent = formatBytes(sum);
 	const xhr = new XMLHttpRequest();
 	await new Promise((resolve, reject) => {

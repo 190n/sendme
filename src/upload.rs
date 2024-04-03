@@ -159,13 +159,17 @@ pub async fn upload(
 			}
 		}
 
+		let mut hasher = xxhash_rust::xxh3::Xxh3::with_seed(69420);
+
 		while let Some(chunk) = field.chunk().await? {
+			hasher.update(&chunk);
 			out.as_mut().write_all(&chunk).map_err(as_internal_error)?;
 			if !state.args.quiet {
 				let _ = progress.update(chunk.len());
 			}
 		}
 		out.flush().map_err(as_internal_error)?;
+		eprintln!("\n{:016x}", hasher.digest());
 
 		if !matches!(state.args.mode, Mode::MultipleFiles { out_dir: _ }) {
 			break;

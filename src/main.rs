@@ -114,11 +114,18 @@ async fn main() -> std::io::Result<()> {
 
 	app = add_static_files(
 		app,
-		&[(
-			"/upload.js",
-			"application/javascript",
-			include_bytes!("../static/upload.js"),
-		)],
+		&[
+			(
+				"/upload.js",
+				"application/javascript",
+				include_bytes!("../static/upload.js"),
+			),
+			(
+				"/xxhash.wasm",
+				"application/wasm",
+				include_bytes!("../zig-out/bin/sendme.wasm"),
+			),
+		],
 	);
 
 	let listener = tokio::net::TcpListener::bind((Ipv4Addr::UNSPECIFIED, state.args.port)).await?;
